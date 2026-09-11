@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FBI-Web — OSINT</title>
+<link rel="icon" href="https://upload.wikimedia.org/wikipedia/commons/d/da/Seal_of_the_Federal_Bureau_of_Investigation.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root{
+    --yellow:#F2C200;
+    --yellow-soft:#FFF7D6;
+    --black:#111;
+    --gray:#666;
+    --line:#e2e2e2;
+    --bg:#fafafa;
+  }
+
+  *{box-sizing:border-box;}
+
+  body{
+    margin:0;
+    font-family:"Open Sans", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background:var(--bg);
+    color:var(--black);
+    font-size:14px;
+    line-height:1.5;
+  }
+
+  header{
+    background:#fff;
+    border-bottom:3px solid var(--yellow);
+    padding:14px 28px;
+    display:flex;
+    align-items:center;
+    gap:16px;
+  }
+  header img{width:48px;height:48px;}
+  header h1{
+    margin:0;
+    font-size:20px;
+    font-weight:600;
+    letter-spacing:1px;
+  }
+  header h1 span{color:var(--yellow);}
+  header .meta{
+    margin-left:auto;
+    font-size:12px;
+    color:var(--gray);
+    text-align:right;
+    line-height:1.4;
+  }
+  header .meta b{color:var(--black);}
+
+  .layout{
+    display:grid;
+    grid-template-columns: 320px 1fr 340px;
+    gap:16px;
+    padding:16px;
+    max-width:1600px;
+    margin:0 auto;
+    height: calc(100vh - 90px);
+  }
+  @media(max-width:1200px){
+    .layout{grid-template-columns:1fr; height:auto;}
+  }
+
+  .panel{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+
+  .panel h2{
+    margin:0 0 14px;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--gray);
+    padding-bottom:8px;
+    border-bottom:1px solid var(--line);
+  }
+
+  label{
+    display:block;
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+    color:var(--gray);
+    margin:10px 0 4px;
+  }
+  input, select{
+    width:100%;
+    padding:8px 10px;
+    background:#fff;
+    color:var(--black);
+    border:1px solid #ccc;
+    border-radius:4px;
+    font-family:inherit;
+    font-size:13px;
+    outline:none;
+    transition:border-color .15s;
+  }
+  input:focus, select:focus{
+    border-color:var(--yellow);
+    box-shadow:0 0 0 2px var(--yellow-soft);
+  }
+
+  button{
+    padding:9px 14px;
+    background:var(--yellow);
+    color:var(--black);
+    font-weight:600;
+    font-size:13px;
+    letter-spacing:.3px;
+    border:none;
+    border-radius:4px;
+    cursor:pointer;
+    font-family:inherit;
+    transition:background .15s;
+    width:100%;
+    margin-top:8px;
+  }
+  button:hover{background:#e0b400;}
+  button:active{transform:translateY(1px);}
+
+  button.ghost{
+    background:#fff;
+    color:var(--black);
+    border:1px solid #ccc;
+  }
+  button.ghost:hover{background:#f4f4f4;border-color:#999;}
+
+  .scroll{overflow-y:auto;flex:1;padding-right:4px;}
+
+  .node-row{
+    display:grid;
+    grid-template-columns:100px 1fr 28px;
+    gap:6px;
+    margin-bottom:6px;
+    align-items:center;
+  }
+  .node-row input, .node-row select{
+    padding:6px 8px;
+    font-size:12px;
+  }
+  .node-row .del,
+  .link-row .del{
+    width:28px;height:28px;padding:0;margin:0;
+    background:#fff;
+    color:var(--gray);
+    border:1px solid #ccc;
+    font-size:15px;
+    line-height:1;
+    border-radius:4px;
+  }
+  .node-row .del:hover,
+  .link-row .del:hover{background:#ffecec;color:#c00;border-color:#c00;}
+
+  .link-row{
+    display:grid;
+    grid-template-columns:1fr 16px 1fr 28px;
+    gap:6px;
+    margin-bottom:6px;
+    align-items:center;
+  }
+  .link-row input{padding:6px 8px;font-size:12px;}
+  .link-row .arrow{text-align:center;color:var(--gray);font-size:12px;}
+
+  .tabs{
+    display:flex;
+    gap:0;
+    margin-bottom:10px;
+    border-bottom:1px solid var(--line);
+  }
+  .tabs button{
+    flex:1;
+    margin:0;
+    background:transparent;
+    color:var(--gray);
+    border:none;
+    border-bottom:2px solid transparent;
+    border-radius:0;
+    padding:8px;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+  }
+  .tabs button:hover{background:#fafafa;color:var(--black);}
+  .tabs button.active{
+    color:var(--black);
+    border-bottom-color:var(--yellow);
+    background:transparent;
+  }
+
+  #web-container{
+    flex:1;
+    min-height:480px;
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:6px;
+    position:relative;
+    overflow:hidden;
+  }
+  #web-container svg{width:100%;height:100%;display:block;cursor:grab;}
+  #web-container svg:active{cursor:grabbing;}
+
+  .node circle{
+    stroke:#fff;
+    stroke-width:2px;
+    cursor:pointer;
+    transition:stroke .15s;
+  }
+  .node circle:hover{stroke:#111;}
+  .node text{
+    font-size:10px;
+    fill:#333;
+    font-family:"Open Sans", sans-serif;
+    font-weight:600;
+    pointer-events:none;
+  }
+  .node.target circle{
+    stroke:#111;
+    stroke-width:2.5px;
+  }
+  .link{
+    stroke:#bbb;
+    stroke-width:1.2px;
+  }
+  .link.target-link{
+    stroke:var(--yellow);
+    stroke-width:1.6px;
+  }
+
+  pre#output{
+    margin:0;
+    white-space:pre-wrap;
+    word-break:break-word;
+    font-family:"Consolas", "Menlo", monospace;
+    font-size:11.5px;
+    line-height:1.6;
+    color:#222;
+    background:#fafafa;
+    padding:12px;
+    border-radius:4px;
+    border:1px solid var(--line);
+    flex:1;
+    overflow:auto;
+  }
+
+  .status{
+    font-size:12px;
+    color:var(--gray);
+    min-height:16px;
+    margin-top:6px;
+  }
+
+  footer{
+    text-align:center;
+    padding:14px;
+    color:var(--gray);
+    font-size:12px;
+    border-top:1px solid var(--line);
+    background:#fff;
+  }
+  footer b{color:var(--black);}
+
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-track{background:#f4f4f4;}
+  ::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px;}
+  ::-webkit-scrollbar-thumb:hover{background:#999;}
+</style>
+</head>
+<body>
+
+<header>
+  <img src="https://upload.wikimedia.org/wikipedia/commons/d/da/Seal_of_the_Federal_Bureau_of_Investigation.svg" alt="FBI">
+  <h1>FBI-<span>Web</span> — OSINT</h1>
+  <div class="meta">
+    Developer: <b>SalvatoreBonpinsiero</b><br>
+    Link Analysis Tool
+  </div>
+</header>
+
+<div class="layout">
+
+  <div class="panel">
+    <h2>Input</h2>
+
+    <label>Target</label>
+    <input id="target" placeholder="example.com" value="target.example">
+
+    <div class="tabs" style="margin-top:14px;">
+      <button id="tabNodes" class="active" onclick="switchTab('nodes')">Nodes</button>
+      <button id="tabLinks" onclick="switchTab('links')">Links</button>
+    </div>
+
+    <div class="scroll" id="tabContentNodes">
+      <div id="nodes"></div>
+      <button class="ghost" onclick="addNode()">+ Add node</button>
+    </div>
+
+    <div class="scroll" id="tabContentLinks" style="display:none">
+      <div id="links"></div>
+      <button class="ghost" onclick="addLink()">+ Add link</button>
+    </div>
+
+    <button onclick="buildWeb()">Build spider web</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Link Analysis</h2>
+    <div id="web-container">
+      <svg id="web"></svg>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button class="ghost" style="margin-top:0" onclick="resetZoom()">Reset view</button>
+      <button class="ghost" style="margin-top:0;display:none" id="dlBtn" onclick="downloadTxt()">Download .txt</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Report</h2>
+    <pre id="output">Waiting for data…</pre>
+  </div>
+
+</div>
+
+<footer>
+  FBI-Web · Developer <b>SalvatoreBonpinsiero</b> · OSINT Spider · TXT Export
+</footer>
+
+<script>
+const TYPES = ["domain","ip","email","phone","person","username","org","url","other"];
+const COLORS = {
+  target:   "#111",
+  domain:   "#F2C200",
+  ip:       "#f6d257",
+  email:    "#ebc520",
+  phone:    "#d9b400",
+  person:   "#c79a00",
+  username: "#a37e00",
+  org:      "#8a6a00",
+  url:      "#F2C200",
+  other:    "#bbb"
+};
+
+let lastDownload = null;
+
+function switchTab(which){
+  document.getElementById("tabContentNodes").style.display = which==="nodes"?"block":"none";
+  document.getElementById("tabContentLinks").style.display = which==="links"?"block":"none";
+  document.getElementById("tabNodes").classList.toggle("active", which==="nodes");
+  document.getElementById("tabLinks").classList.toggle("active", which==="links");
+}
+
+function addNode(value="", type="domain"){
+  const box = document.getElementById("nodes");
+  const row = document.createElement("div");
+  row.className = "node-row";
+
+  const sel = document.createElement("select");
+  TYPES.forEach(t=>{
+    const o = document.createElement("option");
+    o.value=t; o.textContent=t;
+    if(t===type) o.selected=true;
+    sel.appendChild(o);
+  });
+
+  const inp = document.createElement("input");
+  inp.placeholder = "value";
+  inp.value = value;
+
+  const del = document.createElement("button");
+  del.className="del"; del.textContent="×";
+  del.title="Remove";
+  del.onclick = ()=> row.remove();
+
+  row.append(sel, inp, del);
+  box.appendChild(row);
+}
+
+function addLink(source="", target=""){
+  const box = document.getElementById("links");
+  const row = document.createElement("div");
+  row.className = "link-row";
+
+  const s = document.createElement("input");
+  s.placeholder = "source";
+  s.value = source;
+
+  const arrow = document.createElement("span");
+  arrow.className = "arrow";
+  arrow.textContent = "→";
+
+  const t = document.createElement("input");
+  t.placeholder = "target";
+  t.value = target;
+
+  const del = document.createElement("button");
+  del.className="del"; del.textContent="×";
+  del.onclick = ()=> row.remove();
+
+  row.append(s, arrow, t, del);
+  box.appendChild(row);
+}
+
+let simulation = null, svg = null, gRoot = null, zoomBehavior = null;
+
+function renderGraph(graph){
+  const container = document.getElementById("web-container");
+  const W = container.clientWidth;
+  const H = container.clientHeight;
+
+  d3.select("#web").selectAll("*").remove();
+
+  svg = d3.select("#web").attr("viewBox", [0, 0, W, H]);
+  gRoot = svg.append("g");
+
+  zoomBehavior = d3.zoom()
+    .scaleExtent([0.3, 4])
+    .on("zoom", (e)=> gRoot.attr("transform", e.transform));
+
+  svg.call(zoomBehavior);
+
+  const nodes = graph.nodes.map(n => Object.assign({}, n));
+  const links = graph.links.map(l => Object.assign({}, l));
+  const nodeById = new Map(nodes.map(n => [n.id, n]));
+
+  const targetNode = nodeById.get("__TARGET__");
+  if (targetNode){ targetNode.fx = W/2; targetNode.fy = H/2; }
+
+  if (links.length === 0){
+    nodes.forEach(n => {
+      if (n.id !== "__TARGET__") links.push({source:"__TARGET__", target:n.id});
+    });
+  }
+
+  const linkSel = gRoot.append("g")
+    .selectAll("line")
+    .data(links)
+    .enter()
+    .append("line")
+    .attr("class", d => d.source === "__TARGET__" ? "link target-link" : "link");
+
+  const nodeSel = gRoot.append("g")
+    .selectAll("g")
+    .data(nodes)
+    .enter()
+    .append("g")
+    .attr("class", d => "node" + (d.id === "__TARGET__" ? " target" : ""))
+    .call(d3.drag()
+      .on("start", (e,d)=>{ if(!e.active) simulation.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on("drag",  (e,d)=>{ d.fx=e.x; d.fy=e.y; })
+      .on("end",   (e,d)=>{ if(!e.active) simulation.alphaTarget(0); if(d.id!=="__TARGET__"){ d.fx=null; d.fy=null; } })
+    );
+
+  nodeSel.append("circle")
+    .attr("r", d => d.id === "__TARGET__" ? 20 : 11)
+    .attr("fill", d => COLORS[d.type] || COLORS.other);
+
+  nodeSel.append("text")
+    .attr("dy", d => d.id === "__TARGET__" ? 32 : 22)
+    .attr("text-anchor","middle")
+    .text(d => d.label.length > 20 ? d.label.slice(0,18)+"…" : d.label);
+
+  simulation = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d=>d.id)
+      .distance(d => (d.source.id === "__TARGET__" || d.target.id === "__TARGET__") ? 100 : 70)
+      .strength(0.5))
+    .force("charge", d3.forceManyBody().strength(-280))
+    .force("center", d3.forceCenter(W/2, H/2))
+    .force("collision", d3.forceCollide().radius(d => d.id === "__TARGET__" ? 28 : 16))
+    .on("tick", ()=>{
+      linkSel
+        .attr("x1", d=>d.source.x).attr("y1", d=>d.source.y)
+        .attr("x2", d=>d.target.x).attr("y2", d=>d.target.y);
+      nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
+    });
+}
+
+function resetZoom(){
+  if (svg && zoomBehavior){
+    svg.transition().duration(400).call(zoomBehavior.transform, d3.zoomIdentity);
+  }
+}
+
+async function buildWeb(){
+  const target = document.getElementById("target").value.trim();
+  const status = document.getElementById("status");
+  const out = document.getElementById("output");
+
+  if(!target){ status.textContent = "Target is required"; return; }
+
+  const nodes = [...document.querySelectorAll("#nodes .node-row")].map(r=>({
+    type: r.querySelector("select").value,
+    value: r.querySelector("input").value
+  })).filter(n=>n.value.trim());
+
+  const links = [...document.querySelectorAll("#links .link-row")].map(r=>{
+    const inputs = r.querySelectorAll("input");
+    return {source: inputs[0].value.trim(), target: inputs[1].value.trim()};
+  }).filter(l=>l.source && l.target);
+
+  status.textContent = "Building…";
+
+  try{
+    const res = await fetch("/build", {
+      method:"POST",
+      headers:{"Content-Type": "application/json"},
+      body: JSON.stringify({target, nodes, links})
+    });
+    const data = await res.json();
+
+    if(!data.ok){ status.textContent = data.error || "Error"; return; }
+
+    out.textContent = data.txt;
+    renderGraph(data.graph);
+    lastDownload = data.download_url;
+    document.getElementById("dlBtn").style.display = "inline-block";
+    status.textContent = "Saved: " + data.filename;
+  }catch(e){
+    status.textContent = "Error: " + e.message;
+  }
+}
+
+function downloadTxt(){ if(lastDownload) window.location.href = lastDownload; }
+
+addNode("admin@example.com","email");
+addNode("192.168.1.10","ip");
+addNode("John_Doe","username");
+addNode("Acme Corp","org");
+</script>
+</body>
+</html>
